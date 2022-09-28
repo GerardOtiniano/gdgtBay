@@ -1,0 +1,74 @@
+"gdgtBay" offers an accessible opportuntiy to calibrate and predict 
+brGDGT distributions to/with climate conditions. The function runs 
+on the Bayesia Model-Building Interface, Bambi (Capretto et al., 2022),
+which sits above the Bayesian statistical modelling package, PyMC
+(Salvatier et al., 2016). In the combination, the user can select and 
+modify all bayesian parameters such as prior distributions, sampling
+methods (see bambi and PyMC packages for further informatio). 
+
+Each step of the multi-bayesian approach, as outlined by Dearing 
+Crampton-Flood et al. (2020), is labelled below. The user has the option
+to run a calibration model (predictor_data defulat: none) or calibrate
+and then predict results (provide the predictor data of interest; e.g.,
+MBT'5me values).
+
+Calibration model - Outputs the results of the the second bayes as well
+                    as a figure depicting the true vs. estimated
+                    predictand values. To select, use predictor_data
+                    default (None).
+                  - Useful for exploring the model and testing parameters
+                    prior to predicting values.
+                  
+Prediction model  - Outputs the original predictor_data dataframe with two appended
+                    columns, the mean and standard deviation of the predicted 
+                    values.
+
+
+Variable descriptions:
+    • gdgt            - Name ofindex or fractional abundance of interest. If 
+                        predicting, ensure that predictor_data is lablled 
+                        accordingly.
+    • clim            - Name of predictand. Must be in data
+    • data            - Calibration dataset - must inculde 'gdgt' and 'clim'.
+                        Must be in the pandas dataframe format.
+    • bayes_summary   - Summary of first bayesian method results.
+                        defaults to show.
+    • figurepath      - Pathway to save location of figures
+    • user_priors     - If true, user can alter priors in function. If false,
+                        bambi will select priors.
+    • bayes_1_figure  - Figure of posterior predictive ouput from
+                        first bayes application. useful for assessing
+                        model applicability. Defaults to show and save.
+    • true_est_figure - Figure showing true predicted values (x axis) vs
+                        estimated values (y axis). Default to show. Only 
+                        works for calibraiton-only applications.
+    • regression_fig  - Figure showing bayesian regression model (blue) as well
+                        as OLS regression model (fuchsia) and calibratio data
+                        (black).
+    • chains          - Number of Markov chains to run. _# denotes # instance
+                        of Bayes. Default as none to have bambi select. See
+                        bambi documentation for more details.
+    • draws           - Number of draws from sampling method. _# denotes #
+                        instance of Bayes. Default as none to have bambi select. 
+                        See bambi documentation for more details.
+    • cores           - Number of cores for CPU to run. _# denotes #
+                        instance of Bayes. Default as none to have bambi select. 
+                        See bambi documentation for more details.
+    • tune            - Number of samples used to tune predictio model (second 
+                        Bayes instance). Default as none to have bambi select. 
+                        See bambi documentation for more details.
+    • predictor_data  - Optional dataset cotaining predictor (gdgt) data that
+                        from which the user wants to estimate some climate variable
+                        (clim). Must be a pandas dataframe with the predictor column
+                        labelled with the same name as 'gdgt' variables. Feel free to
+                        include any other informatio in this dataframe - the prediction
+                        model appends the mean and standard deviation of predicted
+                        values onto the end of the predictor_data dataframe.
+Function depedencies:
+    • Bambi
+    • PyMC
+    • sklearn
+    • numpy
+    • pandas
+    • matplotlib
+    """
