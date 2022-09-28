@@ -1,0 +1,201 @@
+def gdgtBay(gdgt,clim,data,
+            bayes_summary    = True,
+            figurepath       = 'Figures/',
+            user_priors      = True,
+            bayes_1_figure   = True,
+            true_est_figure  = True,
+            regression_fig   = True,
+            chains_1 = None, draws_1 = None, cores_1 = None,
+            chains_2 = None, draws_2 = None, cores_2 = None, tune = None,
+            predictor_data   = None # gdgt data to predict/estimate climate info. should have an identifier and a gdgt name that matches the predictor input (gdgt)
+           ):
+    """
+"gdgtBay" offers an accessible opportuntiy to calibrate and predict 
+brGDGT distributions to/with climate conditions. The function runs 
+on the Bayesia Model-Building Interface, Bambi (Capretto et al., 2022),
+which sits above the Bayesian statistical modelling package, PyMC
+(Salvatier et al., 2016). In the combination, the user can select and 
+modify all bayesian parameters such as prior distributions, sampling
+methods (see bambi and PyMC packages for further informatio). 
+
+Each step of the multi-bayesian approach, as outlined by Dearing 
+Crampton-Flood et al. (2020), is labelled below. The user has the option
+to run a calibration model (predictor_data defulat: none) or calibrate
+and then predict results (provide the predictor data of interest; e.g.,
+MBT'5me values).
+
+Calibration model - Outputs the results of the the second bayes as well
+                    as a figure depicting the true vs. estimated
+                    predictand values. To select, use predictor_data
+                    default (None).
+                  - Useful for exploring the model and testing parameters
+                    prior to predicting values.
+                  
+Prediction model  - Outputs the original predictor_data dataframe with two appended
+                    columns, the mean and standard deviation of the predicted 
+                    values.
+
+
+Variable descriptions:
+    • gdgt            - Name ofindex or fractional abundance of interest. If 
+                        predicting, ensure that predictor_data is lablled 
+                        accordingly.
+    • clim            - Name of predictand. Must be in data
+    • data            - Calibration dataset - must inculde 'gdgt' and 'clim'.
+                        Must be in the pandas dataframe format.
+    • bayes_summary   - Summary of first bayesian method results.
+                        defaults to show.
+    • figurepath      - Pathway to save location of figures
+    • user_priors     - If true, user can alter priors in function. If false,
+                        bambi will select priors.
+    • bayes_1_figure  - Figure of posterior predictive ouput from
+                        first bayes application. useful for assessing
+                        model applicability. Defaults to show and save.
+    • true_est_figure - Figure showing true predicted values (x axis) vs
+                        estimated values (y axis). Default to show. Only 
+                        works for calibraiton-only applications.
+    • regression_fig  - Figure showing bayesian regression model (blue) as well
+                        as OLS regression model (fuchsia) and calibratio data
+                        (black).
+    • chains          - Number of Markov chains to run. _# denotes # instance
+                        of Bayes. Default as none to have bambi select. See
+                        bambi documentation for more details.
+    • draws           - Number of draws from sampling method. _# denotes #
+                        instance of Bayes. Default as none to have bambi select. 
+                        See bambi documentation for more details.
+    • cores           - Number of cores for CPU to run. _# denotes #
+                        instance of Bayes. Default as none to have bambi select. 
+                        See bambi documentation for more details.
+    • tune            - Number of samples used to tune predictio model (second 
+                        Bayes instance). Default as none to have bambi select. 
+                        See bambi documentation for more details.
+    • predictor_data  - Optional dataset cotaining predictor (gdgt) data that
+                        from which the user wants to estimate some climate variable
+                        (clim). Must be a pandas dataframe with the predictor column
+                        labelled with the same name as 'gdgt' variables. Feel free to
+                        include any other informatio in this dataframe - the prediction
+                        model appends the mean and standard deviation of predicted
+                        values onto the end of the predictor_data dataframe.
+Function depedencies:
+    • Bambi
+    • PyMC
+    • sklearn
+    • numpy
+    • pandas
+    • matplotlib
+    """
+    from sklearn.metrics import r2_score,explained_variance_score
+    from sklearn.metrics import mean_squared_error as mse
+    import bambi as bmb
+    import numpy as np
+    
+    df=pd.DataFrame()
+    df[gdgt]=data[gdgt]
+    df[clim]=data[clim]
+    
+    # Setup dataframe with values of interest
+    df['clim'] = data[clim]
+    df['gdgt'] = data[gdgt]
+    df2        = df.dropna(axis='rows')
+    print("Removed "+str(len(df)-len(df2))+" nan samples. Samples: "+str(len(df2))+"/"+str(len(df)) )
+
+# Bayes 1
+# ___________
+    if user_priors == True:
+        priors = {gdgt:bmb.Prior("Normal", mu=scipy.stats.linregress(df[clim], df[gdgt]).intercept,
+                                sd=scipy.stats.linregress(df[clim], df[gdgt]).intercept_stderr),
+                  clim:bmb.Prior("Normal", mu=scipy.stats.linregress(df[clim], df[gdgt]).slope, 
+                                 sd=scipy.stats.linregress(df[clim], df[gdgt]).stderr)}
+    else: priors = None
+    # Etiological correct formula
+    formula = gdgt+"~"+clim
+    model   = []; model  = bmb.Model(formula,priors=priors,data=df)
+    fitted  = []; fitted = model.fit(draws=draws_1,cores=cores_1, 
+                                     chains=chains_1,include_mean=True)
+    model.predict(fitted, kind="mean") # Predict gdgt parameter from given true temperatures
+
+    # Dictionary
+    gdgt_true = str(gdgt)+"_true"
+    gdgt_mean = str(gdgt)+"_mean"
+    
+    # Create Dataframe of data from first bayes
+    df_2                   = pd.DataFrame()
+    df_2['obs_number']     = fitted.posterior.to_dataframe().reset_index()[str(gdgt)+"_mean_obs"]
+    df_2['slope']          = fitted.posterior.to_dataframe().reset_index()[clim]
+    df_2['intercept']      = fitted.posterior.to_dataframe().reset_index().Intercept
+    df_2[str(gdgt)+"_est"] = fitted.posterior.to_dataframe().reset_index()[gdgt_mean]
+    for i in np.unique(df_2.obs_number):
+        df_2.loc[df_2['obs_number']==i,clim]      = df.reset_index()[clim][i]
+        df_2.loc[df_2['obs_number']==i,gdgt_true] = df.reset_index()[gdgt][i]
+    if bayes_1_figure == True:
+        # Plot abvoe dataframe to ensure estimated data is accurate
+        fig = plt.figure(figsize=(8,5))
+        plt.scatter(df_2[clim], df_2[gdgt_true], label='Observations',zorder=3)
+        plt.scatter(df_2[clim],df_2[str(gdgt)+"_est"],  color='red',alpha=0.75, 
+                    zorder=1,label='predicted '+str(gdgt))
+        x_min=df[clim].min();x_max=df[clim].max()
+        for i in range(0,len(df_2)):
+                       plt.plot([x_min,x_max],[df_2.intercept[i]+df_2.slope[i]*x_min,
+                                               df_2.intercept[i]+df_2.slope[i]*x_max],
+                                color='orange',zorder=0,alpha=0.01)
+        plt.legend()
+        plt.title('Bayes linear regression '+str(clim)+' vs. '+str(gdgt))
+        plt.xlabel(clim);
+        plt.ylabel(gdgt);
+        plt.savefig(str(figurepath)+"Bayes Rule 1 Regression["+
+                str(gdgt)+" + "+str(clim)+"].png",
+                dpi=300)
+        plt.show()
+    else: pass
+    
+# Bayes 2
+# ___________
+    if user_priors == True:
+        priors_2 = {  
+                   str(clim)   :bmb.Prior("Normal", mu=df[clim].mean(), sd=df[clim].std()),
+                   str(gdgt)   :bmb.Prior("Normal", mu=df[gdgt].mean(), sd=df[gdgt].std()),  
+                   "intercept" :bmb.Prior("Normal", mu=df_2.intercept.mean(), sd=df_2.intercept.std()),
+                   "slope"     :bmb.Prior("Normal", mu=df_2.slope.mean(), sd=df_2.slope.std())
+                   }
+    else: priors_2 = None
+    formula_2 = str(clim)+"~ ("+gdgt_true+"-intercept)/slope"
+    model_2   = bmb.Model(formula_2, priors=priors_2, data=df_2)
+    fitted_2  = model_2.fit(draws=draws_2,cores=cores_2,tune=tune)
+# Calibration
+# ___________   
+    if predictor_data is None:
+        model_2.predict(fitted_2, kind="pps")
+        if bayes_summary == False: pass
+        else:
+            print("Summary: ")
+            print(az.summary(fitted_2))
+            print(model_2)
+            plt.figure(); model_2.plot_priors();plt.show()
+            az.plot_ppc(fitted_2);plt.show()
+        if true_est_figure==True:
+            true_vs_est(x_clim,y_clim,y_err,gdgt,clim,fitted_2,figurepath=figurepath) # Shows goodness of fit
+        else: pass
+    
+     # Figure data
+        x_clim = fitted_2.observed_data[clim].values
+        y_clim = fitted_2.posterior_predictive[clim].mean("chain").mean("draw").values
+        y_err  = fitted_2.posterior_predictive[clim].std("chain").std("draw").values
+        if regression_fig == True:
+                regresion_plot(fitted_2, data, df_2, gdgt_true, gdgt, clim, figurepath)
+        else: pass
+        output = fitted_2 #; true_and_estimated_climate = y_true; first_bayes_output=df_2 # Three outputs if you like, but I just go with the results of the final bayes model
+# Prediction
+# ___________    
+    else: 
+     # Dataframe with model parameters for prediction
+        pred = pd.DataFrame()
+        pred[gdgt_true] = predictor_data[gdgt]
+        pred["slope"] = fitted_2.posterior[gdgt_true].mean().values
+        pred["Intercept"] = fitted_2.posterior.Intercept.mean().values
+        model_2.predict(idata=fitted_2,kind='pps',data=pred) # Predict the climate variable
+     # Append estimates to original dataset
+        predictor_data["gdgtBay "+str(clim)]        = fitted_2.posterior_predictive[clim].mean("chain").mean("draw")
+        predictor_data["gdgtBay "+str(clim)+" (2 std)"] = fitted_2.posterior_predictive[clim].std("chain").std("draw")
+        output = predictor_data # Normalize outout      
+        
+    return output
